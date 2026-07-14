@@ -768,23 +768,34 @@
   }
 
   function serializeHtml() {
-    const selected = state.selected;
     endTextEdit();
     selectElement(null);
-    document.body.classList.remove("editor-on", "editor-moving", "editor-resizing", "editor-layout-resizing");
-    // Exclude transient toolbars and handles. They are rebuilt on every page load.
-    const uiSlots = Array.from(document.querySelectorAll("[data-editor-ui]")).map((node) => {
-      const slot = document.createComment("editor-ui");
-      node.replaceWith(slot);
-      return { node, slot };
-    });
-    const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-    uiSlots.forEach(({ node, slot }) => slot.replaceWith(node));
-    if (state.editMode && selected && document.body.contains(selected)) {
-      document.body.classList.add("editor-on");
-      selectElement(selected);
+    // Serialize a detached clone. Mutating the live DOM while a local browser is
+    // saving can leave the page or exported document in a partially restored state.
+    const root = document.documentElement.cloneNode(true);
+    root.querySelectorAll("[data-editor-ui]").forEach((node) => node.remove());
+    root.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
+    root.querySelectorAll("[data-editable]").forEach((node) => node.removeAttribute("data-editable"));
+    const savedBody = root.querySelector("body");
+    if (savedBody) {
+      savedBody.classList.remove("editor-on", "editor-moving", "editor-resizing", "editor-layout-resizing", "editor-text-editing");
     }
+    const doctype = document.doctype
+      ? `<!DOCTYPE ${document.doctype.name}${document.doctype.publicId ? ` PUBLIC \"${document.doctype.publicId}\"` : ""}${document.doctype.systemId ? ` \"${document.doctype.systemId}\"` : ""}>\n`
+      : "<!DOCTYPE html>\n";
+    const html = doctype + root.outerHTML;
+    validateSerializedHtml(html);
     return html;
+  }
+
+  function validateSerializedHtml(html) {
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    if (!parsed.documentElement || !parsed.querySelector("[data-editor-runtime]")) {
+      throw new Error("Saved HTML is missing the editor runtime");
+    }
+    if (parsed.querySelector("parsererror")) {
+      throw new Error("Saved HTML could not be parsed");
+    }
   }
 
   function getCurrentSlide() {

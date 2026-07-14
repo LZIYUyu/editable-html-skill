@@ -18,7 +18,7 @@ Make a separate editable copy unless the user explicitly authorizes overwriting 
    ```
 
    Use `--in-place` only with explicit authorization.
-4. Open the generated file and verify that it loads, retains its original navigation, and exposes the editor toolbar.
+4. Open the generated file and verify that it loads, retains its original navigation, and exposes the editor toolbar. Test Save as once, reopen the saved output, and confirm it is non-empty and shows exactly one editor toolbar.
 5. Report the output path and explain that the first Save action requires the user to choose a file location; a local HTML file cannot silently obtain overwrite permission.
 
 ## Editing requirements
