@@ -1,0 +1,271 @@
+.editor-toolbar {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 10000;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: rgba(17, 17, 17, 0.88);
+  border: 1px solid rgba(240, 236, 229, 0.18);
+  color: #f0ece5;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  backdrop-filter: blur(10px);
+}
+
+.editor-toolbar button,
+.editor-mini-toolbar button {
+  appearance: none;
+  border: 1px solid rgba(240, 236, 229, 0.24);
+  background: rgba(240, 236, 229, 0.08);
+  color: #f0ece5;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.editor-toolbar button:hover,
+.editor-toolbar button.is-active,
+.editor-mini-toolbar button:hover {
+  border-color: #c41e3a;
+  background: #c41e3a;
+  color: #111;
+}
+
+.editor-mini-toolbar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: rgba(240, 236, 229, 0.04);
+  color: rgba(240, 236, 229, 0.5);
+  border-color: rgba(240, 236, 229, 0.14);
+}
+
+.editor-status {
+  min-width: 220px;
+  max-width: 360px;
+  color: rgba(240, 236, 229, 0.74);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-status.is-live {
+  color: #f0ece5;
+}
+
+.editor-mini-toolbar {
+  position: fixed;
+  z-index: 10001;
+  display: none;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(17, 17, 17, 0.9);
+  border: 1px solid rgba(240, 236, 229, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.editor-mini-toolbar.is-visible {
+  display: flex;
+}
+
+body.editor-on [data-editable] {
+  cursor: pointer;
+  transition: none !important;
+}
+
+body.editor-on [data-editable="text"],
+body.editor-on [data-editable="link"] {
+  outline: 1px dashed rgba(196, 30, 58, 0.22);
+  outline-offset: 3px;
+}
+
+body.editor-text-editing [contenteditable="true"] {
+  cursor: text;
+  outline: 2px solid #c41e3a;
+  outline-offset: 4px;
+}
+
+body.editor-text-editing .editor-selection {
+  pointer-events: none;
+  cursor: text;
+}
+
+.editor-selection {
+  position: fixed;
+  z-index: 9999;
+  display: none;
+  pointer-events: auto;
+  border: 2px solid #c41e3a;
+  box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.65);
+  cursor: move;
+}
+
+body.editor-on .editor-selection.is-visible {
+  display: block;
+}
+
+.editor-resize {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  background: #f0ece5;
+  border: 2px solid #c41e3a;
+  box-shadow: 0 0 0 1px #111;
+}
+
+.editor-resize-nw {
+  left: -8px;
+  top: -8px;
+  cursor: nwse-resize;
+}
+
+.editor-resize-ne {
+  right: -8px;
+  top: -8px;
+  cursor: nesw-resize;
+}
+
+.editor-resize-sw {
+  left: -8px;
+  bottom: -8px;
+  cursor: nesw-resize;
+}
+
+.editor-resize-se {
+  right: -8px;
+  bottom: -8px;
+  cursor: nwse-resize;
+}
+
+.editor-edge {
+  position: absolute;
+}
+
+.editor-edge-top {
+  left: 10px;
+  right: 10px;
+  top: -8px;
+  height: 16px;
+  cursor: move;
+}
+
+.editor-edge-right {
+  right: -8px;
+  top: 10px;
+  bottom: 10px;
+  width: 16px;
+  cursor: move;
+}
+
+.editor-edge-bottom {
+  left: 10px;
+  right: 10px;
+  bottom: -8px;
+  height: 16px;
+  cursor: move;
+}
+
+.editor-edge-left {
+  left: -8px;
+  top: 10px;
+  bottom: 10px;
+  width: 16px;
+  cursor: move;
+}
+
+.editor-layout-resize {
+  position: absolute;
+  z-index: 2;
+  width: 13px;
+  height: 13px;
+  background: #111;
+  border: 2px solid #f0ece5;
+  box-shadow: 0 0 0 1px #c41e3a;
+}
+
+.editor-layout-resize-n {
+  left: calc(50% - 7px);
+  top: -8px;
+  cursor: ns-resize;
+}
+
+.editor-layout-resize-e {
+  right: -8px;
+  top: calc(50% - 7px);
+  cursor: ew-resize;
+}
+
+.editor-layout-resize-s {
+  left: calc(50% - 7px);
+  bottom: -8px;
+  cursor: ns-resize;
+}
+
+.editor-layout-resize-w {
+  left: -8px;
+  top: calc(50% - 7px);
+  cursor: ew-resize;
+}
+
+body.editor-moving,
+body.editor-moving * {
+  cursor: move !important;
+}
+
+body.editor-resizing,
+body.editor-resizing * {
+  cursor: nwse-resize !important;
+}
+
+body.editor-layout-resizing,
+body.editor-layout-resizing * {
+  cursor: ew-resize !important;
+}
+
+body.editor-moving .editor-selection,
+body.editor-resizing .editor-selection {
+  border-color: #f0ece5;
+  box-shadow: 0 0 0 3px #c41e3a, 0 0 22px rgba(196, 30, 58, 0.65);
+}
+
+.editor-float {
+  position: absolute;
+  z-index: 5;
+  min-width: 180px;
+  min-height: 54px;
+}
+
+.editor-float-image {
+  object-fit: cover;
+  border: 1px solid rgba(196, 30, 58, 0.78);
+  background: rgba(17, 17, 17, 0.25);
+}
+
+body.editor-on a[data-editable],
+body.editor-on [data-editable] a {
+  cursor: pointer;
+}
+
+body.editor-on .deck-viewport {
+  background:
+    linear-gradient(rgba(196, 30, 58, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(196, 30, 58, 0.08) 1px, transparent 1px),
+    #000;
+  background-size: 32px 32px;
+}
+
+@media (max-width: 900px) {
+  .editor-toolbar {
+    left: 10px;
+    right: 10px;
+    flex-wrap: wrap;
+  }
+
+  .editor-mini-toolbar {
+    left: 10px !important;
+    right: 10px;
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Editable HTML"
+  short_description: "Make owned HTML files editable"
+  default_prompt: "Use $editable-html to make this HTML file editable while preserving its design and navigation."
