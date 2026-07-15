@@ -12,7 +12,11 @@
     miniToolbar: null,
     status: null,
     textEditing: false,
-    textRange: null
+    textRange: null,
+    selectionOrigin: null,
+    selectionPoint: null,
+    selectionBreadcrumbs: null,
+    selectUnderButton: null
   };
 
   function init() {
@@ -47,6 +51,10 @@
     box.className = "editor-selection";
     box.dataset.editorUi = "selection";
     box.innerHTML = [
+      '<div class="editor-context-toolbar">',
+      '  <div class="editor-breadcrumbs" data-selection-breadcrumbs></div>',
+      '  <button type="button" data-select-under hidden>选择下层</button>',
+      '</div>',
       '<div class="editor-resize editor-resize-nw" data-resize="nw"></div>',
       '<div class="editor-resize editor-resize-ne" data-resize="ne"></div>',
       '<div class="editor-resize editor-resize-sw" data-resize="sw"></div>',
@@ -62,8 +70,11 @@
     ].join("");
     document.body.appendChild(box);
     state.selectionBox = box;
+    state.selectionBreadcrumbs = box.querySelector("[data-selection-breadcrumbs]");
+    state.selectUnderButton = box.querySelector("[data-select-under]");
     box.addEventListener("pointerdown", onSelectionPointerDown);
     box.addEventListener("dblclick", (event) => {
+      if (event.target.closest(".editor-context-toolbar")) return;
       if (!state.selected) return;
       if (state.selected.dataset.editable === "text" || state.selected.dataset.editable === "link") {
         beginTextEdit(state.selected);
@@ -116,12 +127,12 @@
       if (!state.editMode) return;
       if (event.target.closest("[data-editor-ui]")) return;
       if (state.textEditing && state.selected && state.selected.contains(event.target)) return;
-      const target = event.target.closest("[data-editable]");
+      const target = getDirectSelectableTarget(event.target);
       if (!target) {
         selectElement(null);
         return;
       }
-      selectElement(target);
+      selectElement(target, { selectionPoint: { x: event.clientX, y: event.clientY } });
       event.preventDefault();
       event.stopPropagation();
     }, true);
@@ -240,15 +251,25 @@
       endTextEdit();
       selectElement(null);
     }
-    setStatus(enabled ? "Edit mode: click to select, double-click text to edit" : "Preview mode");
+    setStatus(enabled ? "编辑模式：点击文字、图片或卡片；在选框工具条中切换选择范围" : "Preview mode");
   }
 
-  function selectElement(el) {
+  function selectElement(el, options = {}) {
     if (state.selected !== el) endTextEdit();
     state.selected = el;
+    if (!el) {
+      state.selectionOrigin = null;
+      state.selectionPoint = null;
+    } else {
+      if (!options.preserveOrigin || !state.selectionOrigin || !document.body.contains(state.selectionOrigin)) {
+        state.selectionOrigin = el;
+      }
+      if (options.selectionPoint) state.selectionPoint = options.selectionPoint;
+    }
     updateSelectionBox();
     updateMiniToolbar();
-    if (el) setStatus(`${el.dataset.editId || el.tagName.toLowerCase()} selected`);
+    if (el) setStatus(`${getElementLabel(el)} selected`);
+    else if (state.editMode) setStatus("编辑模式：点击文字、图片或卡片；在选框工具条中切换选择范围");
   }
 
   function updateSelectionBox() {
@@ -264,8 +285,136 @@
     box.style.top = `${rect.top}px`;
     box.style.width = `${rect.width}px`;
     box.style.height = `${rect.height}px`;
+    box.classList.toggle("context-below", rect.top < 76);
     box.classList.add("is-visible");
+    renderSelectionContext();
     updateMiniToolbar();
+  }
+
+  function getElementLabel(el) {
+    if (!el) return "element";
+    if (el.dataset.editId) return el.dataset.editId;
+    const className = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean)[0] : "";
+    return className ? `${el.tagName.toLowerCase()}.${className}` : el.tagName.toLowerCase();
+  }
+
+  function isVisibleContainer(el) {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 1 && rect.height > 1 && style.display !== "contents" && style.visibility !== "hidden";
+  }
+
+  function getDirectSelectableTarget(node) {
+    if (!node || !node.closest) return null;
+    const editable = node.closest("[data-editable]");
+    if (editable && !editable.closest("[data-editor-ui]")) return editable;
+    const slide = node.closest("[data-editor-slide],.slide") || getEditorStage();
+    let current = node;
+    while (current && current !== slide && current !== document.body && current !== document.documentElement) {
+      if (isDirectSelectableContainer(current)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function isDirectSelectableContainer(el) {
+    if (!el || el.closest("[data-editor-ui]") || !isVisibleContainer(el)) return false;
+    if (el.matches("[data-editor-container],[data-editor-group]")) return true;
+    const className = typeof el.className === "string" ? el.className : "";
+    return /(^|[-_\s])(card|panel|tile|module|widget|frame)([-_\s]|$)/i.test(className);
+  }
+
+  function getSelectionTrail() {
+    const origin = state.selectionOrigin && document.body.contains(state.selectionOrigin)
+      ? state.selectionOrigin
+      : state.selected;
+    if (!origin) return [];
+    const slide = origin.closest("[data-editor-slide],.slide") || getEditorStage();
+    const trail = [origin];
+    const group = findSelectionLevel(origin, slide, isGroupLevel);
+    const row = group === origin ? null : findSelectionLevel(origin, group || slide, (el) => isRowLevel(el, origin));
+    if (row && row !== origin) trail.push(row);
+    if (group && group !== origin) trail.push(group);
+    return trail;
+  }
+
+  function findSelectionLevel(origin, slide, predicate) {
+    let current = origin;
+    while (current && current !== slide && current !== document.body && current !== document.documentElement) {
+      if (predicate(current)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function isGroupLevel(el) {
+    if (!el || !isVisibleContainer(el) || el.closest("[data-editor-ui]")) return false;
+    if (isDirectSelectableContainer(el) || el.matches("[data-editor-group]")) return true;
+    const className = typeof el.className === "string" ? el.className : "";
+    return /(^|[-_\s])(group|section|block)([-_\s]|$)/i.test(className);
+  }
+
+  function isRowLevel(el, origin) {
+    if (!el || el === origin || !isVisibleContainer(el) || el.closest("[data-editor-ui]")) return false;
+    const className = typeof el.className === "string" ? el.className : "";
+    if (/(^|[-_\s])(header|row|item|line)([-_\s]|$)/i.test(className)) return true;
+    const style = getComputedStyle(el);
+    if (style.display === "flex" && style.flexDirection === "row" && el.childElementCount > 1) return true;
+    if (el !== origin.parentElement || el.childElementCount < 2) return false;
+    const rect = el.getBoundingClientRect();
+    const originRect = origin.getBoundingClientRect();
+    return rect.height <= originRect.height * 2.5 + 8;
+  }
+
+  function getHierarchyLabel(el) {
+    if (el.dataset.editable === "image") return "图片";
+    if (el.dataset.editable === "text" || el.dataset.editable === "link") return "文字";
+    if (isGroupLevel(el)) return "组";
+    return "行";
+  }
+
+  function renderSelectionContext() {
+    const breadcrumbs = state.selectionBreadcrumbs;
+    if (!breadcrumbs) return;
+    breadcrumbs.replaceChildren();
+    const trail = getSelectionTrail();
+    trail.forEach((el, index) => {
+      if (index > 0) {
+        const separator = document.createElement("span");
+        separator.className = "editor-breadcrumb-separator";
+        separator.textContent = ">";
+        breadcrumbs.appendChild(separator);
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.selectionLevel = String(index);
+      button.textContent = getHierarchyLabel(el);
+      button.classList.toggle("is-active", el === state.selected);
+      breadcrumbs.appendChild(button);
+    });
+    const candidates = getSelectableElementsAtPoint();
+    state.selectUnderButton.hidden = candidates.length < 2;
+  }
+
+  function getSelectableElementsAtPoint() {
+    const point = state.selectionPoint;
+    if (!point) return [];
+    const candidates = [];
+    document.elementsFromPoint(point.x, point.y).forEach((node) => {
+      if (!node.closest || node.closest("[data-editor-ui]")) return;
+      const editable = node.closest("[data-editable]");
+      const candidate = editable || (isDirectSelectableContainer(node) ? node : null);
+      if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+    });
+    return candidates.filter((candidate) => !candidates.some((other) => other !== candidate && candidate.contains(other)));
+  }
+
+  function selectUnderAtPoint() {
+    const candidates = getSelectableElementsAtPoint();
+    if (candidates.length < 2) return;
+    const index = candidates.indexOf(state.selected);
+    const next = candidates[(index + 1 + candidates.length) % candidates.length] || candidates[0];
+    selectElement(next, { selectionPoint: state.selectionPoint });
   }
 
   function updateMiniToolbar() {
@@ -296,6 +445,21 @@
 
   function onSelectionPointerDown(event) {
     if (!state.selected) return;
+    const levelButton = event.target.closest("[data-selection-level]");
+    if (levelButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const trail = getSelectionTrail();
+      const level = trail[Number(levelButton.dataset.selectionLevel)];
+      if (level) selectElement(level, { preserveOrigin: true });
+      return;
+    }
+    if (event.target.closest("[data-select-under]")) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectUnderAtPoint();
+      return;
+    }
     const resizeDir = event.target.dataset.resize;
     if (resizeDir) {
       startResize(event, resizeDir);
@@ -317,10 +481,12 @@
     event.target.setPointerCapture?.(event.pointerId);
     const target = state.selected;
     const scale = getStageScale();
-    const stageRect = getEditorStage().getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    const pointerOffsetX = (event.clientX - targetRect.left) / scale;
-    const pointerOffsetY = (event.clientY - targetRect.top) / scale;
+    prepareForTransform(target);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startManualX = Number(target.dataset.manualX || 0);
+    const startManualY = Number(target.dataset.manualY || 0);
+    const startScale = getManualScale(target);
     document.body.classList.add("editor-moving");
     setStatus("Moving: release mouse to place", true);
     function onMove(moveEvent) {
@@ -328,10 +494,9 @@
         onUp();
         return;
       }
-      const nextStageX = (moveEvent.clientX - stageRect.left) / scale - pointerOffsetX;
-      const nextStageY = (moveEvent.clientY - stageRect.top) / scale - pointerOffsetY;
-      const baseOrigin = getElementBaseOrigin(target);
-      setManualTransform(target, nextStageX - baseOrigin.x, nextStageY - baseOrigin.y, getManualScale(target));
+      const dx = (moveEvent.clientX - startX) / scale;
+      const dy = (moveEvent.clientY - startY) / scale;
+      setManualTransform(target, startManualX + dx, startManualY + dy, startScale);
       updateSelectionBox();
     }
     function onUp() {
@@ -343,7 +508,7 @@
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("pointercancel", onUp);
       document.body.classList.remove("editor-moving");
-      setStatus("Position placed");
+      setStatus(getPlacementStatus(target, "Position placed"));
     }
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
@@ -359,6 +524,7 @@
     event.stopPropagation();
     event.target.setPointerCapture?.(event.pointerId);
     const target = state.selected;
+    prepareForTransform(target);
     const startX = event.clientX;
     const startY = event.clientY;
     const rect = target.getBoundingClientRect();
@@ -401,7 +567,7 @@
       window.removeEventListener("mouseup", onUp);
       window.removeEventListener("pointercancel", onUp);
       document.body.classList.remove("editor-resizing");
-      setStatus("Scale placed");
+      setStatus(getPlacementStatus(target, "Scale placed"));
     }
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
@@ -466,8 +632,41 @@
   }
 
   function prepareForLayoutResize(el) {
-    if (getComputedStyle(el).display === "inline") el.style.display = "inline-block";
+    prepareForTransform(el);
     el.style.boxSizing = "border-box";
+  }
+
+  function prepareForTransform(el) {
+    if (getComputedStyle(el).display === "inline") el.style.display = "inline-block";
+    migrateLegacyManualTransform(el);
+  }
+
+  function migrateLegacyManualTransform(el) {
+    if (!el.dataset.manualX && !el.dataset.manualY && !el.dataset.manualScale) return;
+    const inlineTransform = el.style.getPropertyValue("transform").trim();
+    if (/^translate\([^)]*\)\s*scale\([^)]*\)$/i.test(inlineTransform)) el.style.removeProperty("transform");
+  }
+
+  function getPlacementStatus(el, successText) {
+    const clipping = getClippingAncestor(el);
+    return clipping ? `${successText}; clipped by ${getElementLabel(clipping)}` : successText;
+  }
+
+  function getClippingAncestor(el) {
+    const rect = el.getBoundingClientRect();
+    let parent = el.parentElement;
+    while (parent && parent !== document.body && parent !== document.documentElement) {
+      const style = getComputedStyle(parent);
+      const clipsX = ["hidden", "clip", "auto", "scroll"].includes(style.overflowX);
+      const clipsY = ["hidden", "clip", "auto", "scroll"].includes(style.overflowY);
+      if (clipsX || clipsY) {
+        const parentRect = parent.getBoundingClientRect();
+        if ((clipsX && (rect.left < parentRect.left || rect.right > parentRect.right))
+          || (clipsY && (rect.top < parentRect.top || rect.bottom > parentRect.bottom))) return parent;
+      }
+      parent = parent.parentElement;
+    }
+    return null;
   }
 
   function beginTextEdit(el) {
@@ -768,34 +967,23 @@
   }
 
   function serializeHtml() {
+    const selected = state.selected;
     endTextEdit();
     selectElement(null);
-    // Serialize a detached clone. Mutating the live DOM while a local browser is
-    // saving can leave the page or exported document in a partially restored state.
-    const root = document.documentElement.cloneNode(true);
-    root.querySelectorAll("[data-editor-ui]").forEach((node) => node.remove());
-    root.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
-    root.querySelectorAll("[data-editable]").forEach((node) => node.removeAttribute("data-editable"));
-    const savedBody = root.querySelector("body");
-    if (savedBody) {
-      savedBody.classList.remove("editor-on", "editor-moving", "editor-resizing", "editor-layout-resizing", "editor-text-editing");
+    document.body.classList.remove("editor-on", "editor-moving", "editor-resizing", "editor-layout-resizing");
+    // Exclude transient toolbars and handles. They are rebuilt on every page load.
+    const uiSlots = Array.from(document.querySelectorAll("[data-editor-ui]")).map((node) => {
+      const slot = document.createComment("editor-ui");
+      node.replaceWith(slot);
+      return { node, slot };
+    });
+    const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+    uiSlots.forEach(({ node, slot }) => slot.replaceWith(node));
+    if (state.editMode && selected && document.body.contains(selected)) {
+      document.body.classList.add("editor-on");
+      selectElement(selected);
     }
-    const doctype = document.doctype
-      ? `<!DOCTYPE ${document.doctype.name}${document.doctype.publicId ? ` PUBLIC \"${document.doctype.publicId}\"` : ""}${document.doctype.systemId ? ` \"${document.doctype.systemId}\"` : ""}>\n`
-      : "<!DOCTYPE html>\n";
-    const html = doctype + root.outerHTML;
-    validateSerializedHtml(html);
     return html;
-  }
-
-  function validateSerializedHtml(html) {
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-    if (!parsed.documentElement || !parsed.querySelector("[data-editor-runtime]")) {
-      throw new Error("Saved HTML is missing the editor runtime");
-    }
-    if (parsed.querySelector("parsererror")) {
-      throw new Error("Saved HTML could not be parsed");
-    }
   }
 
   function getCurrentSlide() {
@@ -835,6 +1023,7 @@
   }
 
   function moveElementBy(el, dx, dy) {
+    prepareForTransform(el);
     const baseX = Number(el.dataset.manualX || 0);
     const baseY = Number(el.dataset.manualY || 0);
     setManualTransform(el, baseX + dx, baseY + dy, getManualScale(el));
@@ -845,7 +1034,8 @@
     el.dataset.manualX = String(Math.round(x));
     el.dataset.manualY = String(Math.round(y));
     el.dataset.manualScale = String(roundScale(nextScale));
-    el.style.setProperty("transform", `translate(${Math.round(x)}px, ${Math.round(y)}px) scale(${roundScale(nextScale)})`, "important");
+    el.style.setProperty("translate", `${Math.round(x)}px ${Math.round(y)}px`, "important");
+    el.style.setProperty("scale", String(roundScale(nextScale)), "important");
     el.style.transformOrigin = "0 0";
   }
 
@@ -856,18 +1046,6 @@
 
   function roundScale(value) {
     return Math.round(value * 1000) / 1000;
-  }
-
-  function getElementBaseOrigin(el) {
-    const stageRect = getEditorStage().getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
-    const stageScale = getStageScale();
-    const manualX = Number(el.dataset.manualX || 0);
-    const manualY = Number(el.dataset.manualY || 0);
-    return {
-      x: (rect.left - stageRect.left) / stageScale - manualX,
-      y: (rect.top - stageRect.top) / stageScale - manualY
-    };
   }
 
   function normalizeUrl(value) {

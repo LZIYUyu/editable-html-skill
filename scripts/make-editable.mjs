@@ -20,16 +20,16 @@ const resolvedOutput = outputPath
 let html = fs.readFileSync(resolvedInput, "utf8");
 html = html.replace(/<script\b[^>]*\bsrc=["'][^"']*editor-mode\.js[^"']*["'][^>]*>\s*<\/script>\s*/gi, "");
 html = html.replace(/<link\b[^>]*\bhref=["'][^"']*editor-mode\.css[^"']*["'][^>]*>\s*/gi, "");
+html = html.replace(/\s*<style\b[^>]*\bdata-editor-runtime\b[^>]*>[\s\S]*?<\/style>\s*/gi, "");
+html = html.replace(/\s*<script\b[^>]*\bdata-editor-runtime\b[^>]*>[\s\S]*?<\/script>\s*/gi, "");
 
-if (!html.includes("data-editor-runtime")) {
-  const root = path.resolve(import.meta.dirname, "..");
-  const css = fs.readFileSync(path.join(root, "runtime", "editor-mode.css"), "utf8");
-  const js = fs.readFileSync(path.join(root, "runtime", "editor-mode.js"), "utf8");
-  const style = `\n<style data-editor-runtime>\n${css}\n</style>\n`;
-  const script = `\n<script data-editor-runtime>\n${js}\n</script>\n`;
-  html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : `${style}${html}`;
-  html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}</body>`) : `${html}${script}`;
-}
+const root = path.resolve(import.meta.dirname, "..");
+const css = fs.readFileSync(path.join(root, "runtime", "editor-mode.css"), "utf8");
+const js = fs.readFileSync(path.join(root, "runtime", "editor-mode.js"), "utf8");
+const style = `\n<style data-editor-runtime>\n${css}\n</style>\n`;
+const script = `\n<script data-editor-runtime>\n${js}\n</script>\n`;
+html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : `${style}${html}`;
+html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}</body>`) : `${html}${script}`;
 
 fs.writeFileSync(resolvedOutput, html, "utf8");
 process.stdout.write(`${resolvedOutput}\n`);

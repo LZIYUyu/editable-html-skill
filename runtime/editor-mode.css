@@ -15,6 +15,7 @@
 }
 
 .editor-toolbar button,
+.editor-context-toolbar button,
 .editor-mini-toolbar button {
   appearance: none;
   border: 1px solid rgba(240, 236, 229, 0.24);
@@ -27,12 +28,15 @@
 
 .editor-toolbar button:hover,
 .editor-toolbar button.is-active,
+.editor-context-toolbar button:hover,
+.editor-context-toolbar button.is-active,
 .editor-mini-toolbar button:hover {
   border-color: #c41e3a;
   background: #c41e3a;
   color: #111;
 }
 
+.editor-toolbar button:disabled,
 .editor-mini-toolbar button:disabled {
   opacity: 0.35;
   cursor: default;
@@ -96,10 +100,65 @@ body.editor-text-editing .editor-selection {
   position: fixed;
   z-index: 9999;
   display: none;
-  pointer-events: auto;
+  pointer-events: none;
   border: 2px solid #c41e3a;
   box-shadow: 0 0 0 1px rgba(17, 17, 17, 0.65);
   cursor: move;
+}
+
+.editor-context-toolbar {
+  position: absolute;
+  left: -2px;
+  bottom: calc(100% + 8px);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  max-width: min(620px, calc(100vw - 24px));
+  padding: 4px;
+  overflow-x: auto;
+  color: #f0ece5;
+  background: rgba(17, 17, 17, 0.94);
+  border: 1px solid rgba(240, 236, 229, 0.24);
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  white-space: nowrap;
+  cursor: default;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+}
+
+.editor-resize,
+.editor-edge,
+.editor-layout-resize,
+.editor-context-toolbar {
+  pointer-events: auto;
+}
+
+.editor-selection.context-below .editor-context-toolbar {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+.editor-context-toolbar button {
+  flex: none;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.editor-breadcrumbs {
+  display: flex;
+  align-items: center;
+}
+
+.editor-breadcrumb-separator {
+  flex: none;
+  padding: 0 3px;
+  color: rgba(240, 236, 229, 0.42);
+  font-size: 11px;
+}
+
+.editor-context-toolbar [data-select-under] {
+  margin-left: 5px;
+  border-color: rgba(196, 30, 58, 0.68);
 }
 
 body.editor-on .editor-selection.is-visible {
