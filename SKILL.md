@@ -19,7 +19,7 @@ Preserve the source HTML and create an editable copy beside it unless the user e
 
    Use `--in-place` only when the user explicitly authorizes overwriting the source.
 4. Re-run the injector to upgrade an existing editable HTML. It must replace the older inlined runtime and leave exactly one runtime style and one runtime script.
-5. Open the output and validate preview mode, navigation, the main edit interactions, and saving. Reopen a saved result and confirm that it is non-empty, remains editable, and creates exactly one runtime toolbar.
+5. Open the output and validate the `浏览` / `编辑` switch, navigation, the main edit interactions, saving, `放映`, and `导出`. Confirm that `Esc` and `Ctrl+Shift+E` restore the toolbar after entering presentation mode. Reopen a saved result and confirm that it is non-empty, remains editable, and creates exactly one runtime toolbar. Confirm that the exported `_演示版.html` contains no editor runtime or editor metadata and still preserves design, navigation, animation, links, inserted images, and manual placement.
 6. Report the output path and explain that the first Save action must ask the user to choose the file to overwrite because a standalone local HTML cannot silently obtain write permission.
 
 ## Editing requirements
@@ -37,6 +37,9 @@ Keep the editor self-contained in the generated HTML and retain all of these cap
 - avoid parent controls and layer-order controls in the global toolbar, and do not change z-index merely to make an element selectable;
 - warn when a moved or scaled element is clipped by an overflow ancestor;
 - support Save and Save as with the File System Access API when available;
+- provide a visible `浏览` / `编辑` two-state switch;
+- provide `放映` to leave editing, hide all editor UI, request fullscreen, briefly show `按 Esc 退出放映`, and restore the toolbar with `Esc`, fullscreen exit, or `Ctrl+Shift+E`;
+- provide `导出` to create a separate `_演示版.html` without editor runtime, UI, or editor-only metadata while preserving design and playback behavior;
 - exclude all runtime-only `[data-editor-ui]` elements during serialization and rebuild them on reopen;
 - fall back to downloading a non-empty `.html` copy when direct file writing is unavailable or fails.
 
@@ -46,6 +49,7 @@ Keep the editor self-contained in the generated HTML and retain all of these cap
 - Make Save as request a new file handle every time.
 - Write a `Blob` with `text/html;charset=utf-8`, close the writable stream, and verify that the saved file size matches the Blob before reporting success.
 - Do not immediately revoke the Blob URL used by the fallback download.
+- Make Export always choose a separate `_演示版.html` target or download that named copy; never overwrite the editable source.
 
 ## Resources
 

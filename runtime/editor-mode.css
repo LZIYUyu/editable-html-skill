@@ -26,6 +26,15 @@
   cursor: pointer;
 }
 
+.editor-mode-switch {
+  display: flex;
+  gap: 0;
+}
+
+.editor-mode-switch button + button {
+  margin-left: -1px;
+}
+
 .editor-toolbar button:hover,
 .editor-toolbar button.is-active,
 .editor-context-toolbar button:hover,
@@ -57,6 +66,30 @@
 
 .editor-status.is-live {
   color: #f0ece5;
+}
+
+.editor-presentation-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  z-index: 10002;
+  display: none;
+  translate: -50% 0;
+  padding: 10px 16px;
+  border: 1px solid rgba(240, 236, 229, 0.2);
+  background: rgba(17, 17, 17, 0.82);
+  color: #f0ece5;
+  font: 13px/1.2 "Microsoft YaHei", "PingFang SC", sans-serif;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+body.editor-presenting [data-editor-ui]:not([data-editor-ui="presentation-hint"]) {
+  display: none !important;
+}
+
+body.editor-presenting .editor-presentation-hint.is-visible {
+  display: block;
 }
 
 .editor-mini-toolbar {

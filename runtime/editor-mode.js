@@ -6,6 +6,7 @@
 
   const state = {
     editMode: false,
+    presenting: false,
     selected: null,
     fileHandle: null,
     selectionBox: null,
@@ -16,18 +17,22 @@
     selectionOrigin: null,
     selectionPoint: null,
     selectionBreadcrumbs: null,
-    selectUnderButton: null
+    selectUnderButton: null,
+    presentationHint: null,
+    presentationHintTimer: null
   };
 
   function init() {
     createToolbar();
+    createPresentationHint();
     createSelectionBox();
     createMiniToolbar();
     annotateDeck();
     bindSelection();
     bindKeyboard();
     bindDeckGuards();
-    setStatus("Preview mode");
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    setStatus("浏览状态");
   }
 
   function createToolbar() {
@@ -35,15 +40,29 @@
     toolbar.className = "editor-toolbar";
     toolbar.dataset.editorUi = "toolbar";
     toolbar.innerHTML = [
-      '<button type="button" data-editor-action="toggle">Edit</button>',
-      '<button type="button" data-editor-action="image">Add image</button>',
-      '<button type="button" data-editor-action="save">Save</button>',
-      '<button type="button" data-editor-action="saveas">Save as</button>',
+      '<div class="editor-mode-switch" role="group" aria-label="编辑状态">',
+      '  <button type="button" class="is-active" data-editor-action="browse">浏览</button>',
+      '  <button type="button" data-editor-action="edit">编辑</button>',
+      '</div>',
+      '<button type="button" data-editor-action="image">添加图片</button>',
+      '<button type="button" data-editor-action="save">保存</button>',
+      '<button type="button" data-editor-action="saveas">另存为</button>',
+      '<button type="button" data-editor-action="present">放映</button>',
+      '<button type="button" data-editor-action="export" title="生成不含编辑功能的演示文件">导出</button>',
       '<span class="editor-status" data-editor-ui="status"></span>'
     ].join("");
     document.body.appendChild(toolbar);
     state.status = toolbar.querySelector('[data-editor-ui="status"]');
     toolbar.addEventListener("click", onToolbarClick);
+  }
+
+  function createPresentationHint() {
+    const hint = document.createElement("div");
+    hint.className = "editor-presentation-hint";
+    hint.dataset.editorUi = "presentation-hint";
+    hint.textContent = "按 Esc 退出放映";
+    document.body.appendChild(hint);
+    state.presentationHint = hint;
   }
 
   function createSelectionBox() {
@@ -159,6 +178,18 @@
 
   function bindKeyboard() {
     document.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        if (state.presenting) exitPresentation();
+        return;
+      }
+      if (state.presenting) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          exitPresentation();
+        }
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e") {
         event.preventDefault();
         setEditMode(!state.editMode);
@@ -217,10 +248,13 @@
 
   function onToolbarClick(event) {
     const action = event.target.dataset.editorAction;
-    if (action === "toggle") setEditMode(!state.editMode);
+    if (action === "browse") setEditMode(false);
+    if (action === "edit") setEditMode(true);
     if (action === "image") addImage();
     if (action === "save") saveHtml();
     if (action === "saveas") saveAsHtml();
+    if (action === "present") enterPresentation();
+    if (action === "export") exportPresentationHtml();
   }
 
   function onMiniToolbarClick(event) {
@@ -244,14 +278,54 @@
   function setEditMode(enabled) {
     state.editMode = enabled;
     document.body.classList.toggle("editor-on", enabled);
-    const button = document.querySelector('[data-editor-action="toggle"]');
-    button.classList.toggle("is-active", enabled);
-    button.textContent = enabled ? "Preview" : "Edit";
+    const browseButton = document.querySelector('[data-editor-action="browse"]');
+    const editButton = document.querySelector('[data-editor-action="edit"]');
+    browseButton?.classList.toggle("is-active", !enabled);
+    editButton?.classList.toggle("is-active", enabled);
     if (!enabled) {
       endTextEdit();
       selectElement(null);
     }
-    setStatus(enabled ? "编辑模式：点击文字、图片或卡片；在选框工具条中切换选择范围" : "Preview mode");
+    setStatus(enabled ? "编辑状态：点击文字、图片或卡片；在选框工具条中切换选择范围" : "浏览状态");
+  }
+
+  function enterPresentation() {
+    setEditMode(false);
+    state.presenting = true;
+    document.body.classList.add("editor-presenting");
+    showPresentationHint();
+    const request = document.documentElement.requestFullscreen?.();
+    if (request && typeof request.catch === "function") request.catch(() => {});
+  }
+
+  function exitPresentation() {
+    if (!state.presenting) return;
+    state.presenting = false;
+    document.body.classList.remove("editor-presenting");
+    hidePresentationHint();
+    if (document.fullscreenElement) {
+      const request = document.exitFullscreen?.();
+      if (request && typeof request.catch === "function") request.catch(() => {});
+    }
+    setStatus("浏览状态");
+  }
+
+  function onFullscreenChange() {
+    if (state.presenting && !document.fullscreenElement) exitPresentation();
+  }
+
+  function showPresentationHint() {
+    if (!state.presentationHint) return;
+    clearTimeout(state.presentationHintTimer);
+    state.presentationHint.classList.add("is-visible");
+    state.presentationHintTimer = setTimeout(() => {
+      state.presentationHint?.classList.remove("is-visible");
+    }, 2200);
+  }
+
+  function hidePresentationHint() {
+    clearTimeout(state.presentationHintTimer);
+    state.presentationHint?.classList.remove("is-visible");
   }
 
   function selectElement(el, options = {}) {
@@ -925,6 +999,36 @@
     }
   }
 
+  async function exportPresentationHtml() {
+    const html = serializePresentationHtml();
+    const suggestedName = getSuggestedExportName();
+    if (!("showSaveFilePicker" in window)) {
+      downloadHtml(html, suggestedName);
+      setStatus("演示版已导出");
+      return;
+    }
+    try {
+      setStatus("请选择演示版保存位置", true);
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: "HTML", accept: { "text/html": [".html"] } }]
+      });
+      const outputBlob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const writable = await handle.createWritable();
+      await writable.write(outputBlob);
+      await writable.close();
+      const savedFile = await handle.getFile();
+      if (savedFile.size !== outputBlob.size) throw new Error("Exported file size did not match the HTML output");
+      setStatus("演示版已导出");
+    } catch (error) {
+      if (error && error.name === "AbortError") setStatus("已取消导出");
+      else {
+        downloadHtml(html, suggestedName);
+        setStatus("导出失败，已下载演示版副本");
+      }
+    }
+  }
+
   async function saveWithPicker(html, forceNew) {
     try {
       if (forceNew || !state.fileHandle) {
@@ -952,12 +1056,12 @@
     }
   }
 
-  function downloadHtml(html) {
+  function downloadHtml(html, filename = getSuggestedSaveName()) {
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = getSuggestedSaveName();
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -984,6 +1088,33 @@
       selectElement(selected);
     }
     return html;
+  }
+
+  function serializePresentationHtml() {
+    const root = document.documentElement.cloneNode(true);
+    root.querySelectorAll('[data-editor-ui],style[data-editor-runtime],script[data-editor-runtime]').forEach((node) => node.remove());
+    const body = root.querySelector("body");
+    body?.classList.remove("editor-on", "editor-text-editing", "editor-moving", "editor-resizing", "editor-layout-resizing", "editor-presenting");
+    root.querySelectorAll("[contenteditable]").forEach((el) => {
+      el.removeAttribute("contenteditable");
+      el.removeAttribute("spellcheck");
+    });
+    root.querySelectorAll(".editor-float").forEach((el) => {
+      el.style.position ||= "absolute";
+      el.style.zIndex ||= "5";
+      el.style.minWidth ||= "180px";
+      el.style.minHeight ||= "54px";
+      if (el.classList.contains("editor-float-image")) el.style.objectFit ||= "cover";
+      el.classList.remove("editor-float", "editor-float-image");
+    });
+    const editorAttributes = [
+      "data-editable", "data-edit-id", "data-manual-x", "data-manual-y", "data-manual-scale",
+      "data-editor-container", "data-editor-group"
+    ];
+    root.querySelectorAll(editorAttributes.map((name) => `[${name}]`).join(",")).forEach((el) => {
+      editorAttributes.forEach((name) => el.removeAttribute(name));
+    });
+    return "<!DOCTYPE html>\n" + root.outerHTML;
   }
 
   function getCurrentSlide() {
@@ -1064,6 +1195,12 @@
   function getSuggestedSaveName() {
     const current = decodeURIComponent(location.pathname.split("/").pop() || "editable-deck.html");
     return current.endsWith(".html") ? current : "editable-deck.html";
+  }
+
+  function getSuggestedExportName() {
+    const current = getSuggestedSaveName();
+    const base = current.replace(/\.html$/i, "").replace(/_演示版$/u, "");
+    return `${base}_演示版.html`;
   }
 
   function setStatus(text, live) {
